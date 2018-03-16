@@ -470,13 +470,13 @@ class AddUserView(View):
             first_name = form.cleaned_data['first_name']
             last_name = form.cleaned_data['last_name']
             email = form.cleaned_data['email']
+            ct = ContentType.objects.get_for_model(User)
+            p = Permission.objects.get(content_type=ct, codename='change_user')
             if not users:
                 if password1 != password2:
                     return HttpResponse("Podane hasła są różne")
                 else:
                     user = User.objects.create_user(username=username, password=password1, first_name=first_name, last_name=last_name, email=email)
-                    ct = ContentType.objects.get_for_model(User)
-                    p = Permission.objects.create(codename='change_user', content_type=ct)
                     user.user_permissions.add(p)
                     user.save()
                     return HttpResponse("Utworzono użytkownika {}!".format(username))
@@ -493,15 +493,17 @@ class ResetPasswordView(View):
 
     def get(self, request, id):
         user = User.objects.get(pk=id)
-        # if request.user.has_perm('change_user'):
         form = ResetPasswordForm()
         ctx = {
             'form': form,
             'user': user,
-        }
-        return render(request, 'reset_password.html', ctx)
-        # else:
-        #     return HttpResponse("Użytkownik {} nie ma uprawnień do zmiany hasła" .format(user))
+            }
+        def confirm_user(request):
+            if request.user.has_perm('change_user'):
+                return render(request, 'reset_password.html', ctx)
+            else:
+                return HttpResponse("Użytkownik {} nie ma uprawnień do zmiany hasła" .format(user))
+        return confirm_user(request)
 
     def post(self, request, id):
         form = ResetPasswordForm(request.POST)
@@ -515,3 +517,19 @@ class ResetPasswordView(View):
                 return HttpResponse("Dokonano zmiany hasła!")
             else:
                 return HttpResponse("Podane hasła są różne!")
+
+
+class CreatePermissionView(View):
+    def get(self, request):
+        ct = ContentType.objects.get_for_model(User)
+        p = Permission.objects.create(codename='create_user', name='Can change password', content_type=ct)
+        return HttpResponse("Udało się utworzyć uprawnienie!")
+
+class GivePermissionView(View):
+    def get(self, request, user_id):
+        user = User.objects.get(pk=user_id)
+        ct = ContentType.objects.get_for_model(User)
+        p = Permission.objects.get(content_type=ct, codename='change_user', name='Can change password')
+        user.user_permissions.add(p)
+        user.save()
+        return HttpResponse("Nadano użytkownikowi {} uprawnienia".format(user.username))
